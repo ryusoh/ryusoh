@@ -4,6 +4,6 @@ Between two waves of the sea
 
 ---
 
-![](https://raw.githubusercontent.com/ryusoh/host/refs/heads/master/archive/personal/DSCF9277.jpg)
+![](assets/background.jpg)
 
 <div align="right"><em>Shanghai &middot; 2025 © <a href="https://instagram.com/lyeutsaon" target="_blank" rel="noopener noreferrer">@lyeutsaon</a></em></div>

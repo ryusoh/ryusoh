@@ -63,9 +63,9 @@ tag/history mixing, surprise factor):
 1. **Namespace foundation content in a subdir** (`foundation/`, plus the natural
    `.github/workflows/` for CI). Keep the repo root and `README.md` pristine so
    the profile stays clean.
-2. **Decide the tag strategy up front.** Versioning the brand via git tags
-   (`@v1`) puts those tags on the profile repo's release namespace — accept that,
-   or prefix/path-scope tags so they read clearly.
+2. **Decide the tag strategy up front** — done; see
+   [Tag strategy](#tag-strategy) below. Prefixed per-artifact tags keep the
+   profile repo's single namespace clean.
 3. **Hard rule: nothing private here** (the repo is permanently public).
 
 Consumers reference it as e.g.
@@ -79,6 +79,36 @@ or pin a jsDelivr CDN URL against it (works because it's public).
   defaults become worth one extra repo.
 - Before wiring reusable workflows: **normalize `ryusoh.github.io` from `master`
   to `main`** so `@tag`/branch refs stay uniform across consumers.
+
+### Tag strategy
+
+One repo holds several artifacts that evolve on **independent cadences** (CI
+workflows, the brand package, shared configs), and it shares its tag namespace
+with the profile repo. So: **per-artifact, prefixed semver tags** — the prefix
+both prevents collisions and self-documents what a tag is for.
+
+| Artifact                        | Tag form                    | How consumers pin                                                                                  |
+| ------------------------------- | --------------------------- | -------------------------------------------------------------------------------------------------- |
+| Reusable workflows / actions    | `ci-vN` (+ `ci-vN.M.P`)     | **Moving major** `@ci-v1`, re-pointed on minor/patch (Actions idiom); exact `@ci-v1.2.0` to freeze |
+| Brand (tokens + ESM components) | `brand-vMAJOR.MINOR.PATCH`  | **Exact** `@brand-v1.2.0` (reproducible rendering; bumped via Renovate PRs)                        |
+| Shared lint/format configs      | `config-vMAJOR.MINOR.PATCH` | Exact, **only if referenced via git**; if published to npm, npm semver supersedes git tags         |
+
+Rationale:
+
+- **Prefixes** stop three independent release streams from fighting over one
+  namespace and make `git tag` output readable at a glance.
+- **Moving-major for CI** matches the GitHub Actions convention (`@v1`), keeping
+  consumer stubs low-churn — you re-point `ci-v1` on each minor/patch.
+- **Exact-pin for the brand** matches the "controlled rollout / no silent drift"
+  goal — a consumer's look only changes when its pin (a reviewed Renovate PR)
+  changes.
+- **npm note:** if the brand or config is ever npm-published, npm versions cover
+  those; git tags then only govern reusable workflows + git-vendored assets.
+
+This is also what **structurally resolves** the "brand release namespace
+conflicts with profile-site versioning" risk in the decision record: the profile
+site (if ever versioned) would use bare `vN` / its own prefix, never colliding
+with `brand-*` / `ci-*` / `config-*`.
 
 ### Decision record: why the profile repo, not a dedicated one
 

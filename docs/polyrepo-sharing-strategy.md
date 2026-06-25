@@ -321,6 +321,54 @@ components, and media are never slower **when vendored same-origin** (identical 
 today); the _only_ thing that adds latency is live third-party CDN delivery of
 browser-facing assets.
 
+## Local testing / dev loop
+
+The edit→see loop for shared changes. Most of it is a normal browser; only a
+small slice needs the consumer's real runtime.
+
+### Getting foundation edits into the dir you serve
+
+When editing the foundation (`~/dev/…`), the change must appear in whatever dir
+the dev server serves. During development:
+
+- **Symlink the vendored-shared subdir in each consumer → the foundation working
+  tree.** Edit once in the foundation, reload the browser, and it reflects in
+  `fund`, `networking`, `ryusoh.github.io`, _and_ the Anki addon's browser
+  preview at once. **Swap symlinks back to real vendored copies before
+  commit/release.**
+- Alternative if symlinks misbehave with a tool: a `watch + rsync` that mirrors
+  foundation → each consumer on change.
+
+### Fast loop — browser preview (covers all consumers, Anki included)
+
+Anki is _not_ a special case for visual/DOM work: its web layer
+(`terminal/index.html`, `graph/index.html`, `index.html`) is a **standalone
+static site** — full HTML pages, manifest, service worker, even deployed at
+`anki.lyeutsaon.com` — that is _additionally_ rendered in Anki's Qt WebEngine
+webview. The code is already localhost-aware (`js/config.js` branches on
+`isLocalhost`). So preview it exactly like `fund`:
+
+```sh
+cd "/Users/lz/Library/Application Support/Anki2/addons21" && python3 -m http.server 8000
+# open http://localhost:8000/terminal/   (per the addon's own js/graph/README.md)
+```
+
+Shared CSS/JS/components (glass effect, terminal, nav container, tokens) render
+identically here. This covers ~90% of shared-component work with no Anki running.
+The addon's distance from `~/dev` stops mattering — the symlink crosses the gap.
+
+### Slow loop — only for Anki webview/bridge-specific behavior
+
+Only needed for what the browser can't exercise: the Python↔JS bridge
+(`review_heatmap/web_bridge.py` → `webview_did_receive_js_message`), Anki chrome
+integration, or Qt WebEngine rendering quirks.
+
+1. Sync/symlink the change into the addon dir.
+2. Reload the webview (reopen the screen, or restart Anki). _(Verify the exact
+   in-app reload hook in the addon before relying on it.)_
+3. To inspect with real Chrome DevTools, launch Anki with
+   `QTWEBENGINE_REMOTE_DEBUGGING=9000` and open `http://localhost:9000`.
+
 ## Recommended concrete stack
 
 1. **`foundation` repo** = source of truth (this `ryusoh/ryusoh` repo).

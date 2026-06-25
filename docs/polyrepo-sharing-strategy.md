@@ -254,26 +254,72 @@ Direct pushes would reintroduce it.
 
 ## Performance
 
-Sharing and runtime cost are separable. It depends on _when_ sharing is resolved:
+Sharing and runtime cost are separable. The principle: cost depends on _when_
+sharing is resolved (author/sync time vs runtime) and _how_ it's delivered
+(same-origin vs third-party CDN). Most of the foundation never reaches the
+browser at all.
 
-- **Resolve at sync time, serve same-origin (recommended).** Vendored components
-  - `tokens.css` are copied into each repo and served from GitHub Pages, cached
-    by the service worker (`sw.js`), on the same HTTP/2 connection as everything
-    else. **Runtime is byte-for-byte identical to today** — the user never pays for
-    the sharing.
-- **Live third-party CDN linking at runtime (avoid for production).** Adds a DNS
-  - TLS handshake to a new origin, risks an **ESM waterfall** (nested imports
-    discovered sequentially), and puts a third-party origin in the critical render
-    path. Fine for prototyping, not production.
+### Per-component breakdown
 
-CSS custom properties have **no runtime cost** vs hardcoded values. CI/sync/
-Renovate latency is async background process — off the page-load critical path
-entirely.
+**Never slower — never shipped to the browser** (consumed at dev/CI/author time):
 
-One tradeoff: vendoring many small ESM files means more (same-origin) requests;
-cheap under HTTP/2 at this scale. Only if a shared bundle grows large would you
-minify/concat **at sync time** — and that reintroduces a build step, so do it
-only if measurement shows a problem. Don't pre-optimize.
+| Component                                               | Used at | Page-load impact |
+| ------------------------------------------------------- | ------- | ---------------- |
+| Reusable workflows / CI (Bucket 1)                      | CI      | none             |
+| Lint / format / type configs (Bucket 2)                 | dev+CI  | none             |
+| `Makefile` includes                                     | dev     | none             |
+| `.claude` commands, issue templates, labels, CODEOWNERS | dev     | none             |
+
+The only thing these add is a trivial _resolution_ step to a CI run (seconds) —
+not user-facing.
+
+**Browser-facing (Bucket 3) — identical to today _if_ vendored same-origin:**
+
+| Component                    | Delivery                              | Impact                                                                                                                                                  |
+| ---------------------------- | ------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Design tokens (`tokens.css`) | vendored same-origin / inlined        | **none** — CSS custom properties have no runtime cost vs hardcoded                                                                                      |
+| Shared ESM components        | vendored same-origin (`vendor:fetch`) | **none** — same bytes/origin/SW-cache/HTTP/2 as today                                                                                                   |
+| Shared ESM components        | **live third-party CDN** (import map) | **slower** — extra DNS+TLS to a new origin, risk of an **ESM waterfall** (nested imports fetched sequentially), third-party in the critical render path |
+
+Key point: these components are **already shipped today** (copy-duplicated into
+each repo). A vendored foundation changes the _authoring source_, not what the
+browser downloads → net runtime unchanged. The only regression is switching
+delivery to a live CDN.
+
+### Media / images / fonts
+
+Same same-origin-vs-CDN rule, with media-specific wrinkles:
+
+- **Cache partitioning killed the shared-CDN cache win.** All major browsers (and
+  Anki's Chromium-based Qt WebEngine) now partition the HTTP cache by top-level
+  site, so the same CDN URL is **re-downloaded per site** — a live CDN for media
+  now carries the extra-origin cost with no cross-site cache upside. **Vendor
+  same-origin.**
+- **Most media isn't render-blocking** (images are async / below-fold via
+  `loading="lazy"`), so latency hurts less than for CSS/JS. **Fonts are the
+  exception** — self-host `woff2` **same-origin** (e.g. `JetBrains Mono`); don't
+  live-link Google Fonts (cache partitioning removed that benefit too).
+- **The real lever is format/size, not hosting.** A foundation is a perf
+  _opportunity_ here: optimize once (AVIF/WebP, subset `woff2`, SVG icons) and
+  propagate, replacing today's inconsistently-optimized per-repo copies.
+- **Cost of vendoring media is git size, not speed.** Binaries don't
+  delta-compress, so each consumer's copy bloats its repo. Mitigate (only if it
+  bites) with deploy-time vendoring or Git LFS; at this scale, just vendoring is
+  fine.
+
+### Notes
+
+- CSS custom properties have **no runtime cost** vs hardcoded values. CI / sync /
+  Renovate latency is async background process — off the page-load critical path.
+- Vendoring many small ESM files means more (same-origin) requests; cheap under
+  HTTP/2 at this scale. Only if a shared bundle grows large would you minify /
+  concat **at sync time** — that reintroduces a build step, so do it only if
+  measurement shows a problem. Don't pre-optimize.
+
+**Bottom line:** CI/configs/agents are never slower (not shipped); brand tokens,
+components, and media are never slower **when vendored same-origin** (identical to
+today); the _only_ thing that adds latency is live third-party CDN delivery of
+browser-facing assets.
 
 ## Recommended concrete stack
 
